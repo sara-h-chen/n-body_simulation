@@ -135,22 +135,25 @@ void updatePosition(const double timeStepSize) {
   double deltaT = (timeStepSize * timeStepSize) / 2;
 
   for (int i=0; i < NumberOfBodies; ++i) {
-    accelerationX = bodies[i].forceX / bodies[i].mass;
-    accelerationY = bodies[i].forceY / bodies[i].mass;
-    accelerationZ = bodies[i].forceZ / bodies[i].mass;
+    // Update only the active bodies
+    // if (bodies[i].isActive) {
+      accelerationX = bodies[i].forceX / bodies[i].mass;
+      accelerationY = bodies[i].forceY / bodies[i].mass;
+      accelerationZ = bodies[i].forceZ / bodies[i].mass;
 
-    bodies[i].positionX = bodies[i].positionX + (timeStepSize * bodies[i].velocityX) + (deltaT * accelerationX);
-    bodies[i].positionY = bodies[i].positionY + (timeStepSize * bodies[i].velocityY) + (deltaT * accelerationY);
-    bodies[i].positionZ = bodies[i].positionZ + (timeStepSize * bodies[i].velocityZ) + (deltaT * accelerationZ);
+      bodies[i].positionX = bodies[i].positionX + (timeStepSize * bodies[i].velocityX) + (deltaT * accelerationX);
+      bodies[i].positionY = bodies[i].positionY + (timeStepSize * bodies[i].velocityY) + (deltaT * accelerationY);
+      bodies[i].positionZ = bodies[i].positionZ + (timeStepSize * bodies[i].velocityZ) + (deltaT * accelerationZ);
 
-    bodies[i].velocityX = bodies[i].velocityX + (timeStepSize * accelerationX);
-    bodies[i].velocityY = bodies[i].velocityY + (timeStepSize * accelerationY);
-    bodies[i].velocityZ = bodies[i].velocityZ + (timeStepSize * accelerationZ);
+      bodies[i].velocityX = bodies[i].velocityX + (timeStepSize * accelerationX);
+      bodies[i].velocityY = bodies[i].velocityY + (timeStepSize * accelerationY);
+      bodies[i].velocityZ = bodies[i].velocityZ + (timeStepSize * accelerationZ);
 
-    // Set all force to 0 for calculation of next iteration
-    bodies[i].forceX = 0;
-    bodies[i].forceY = 0;
-    bodies[i].forceZ = 0;
+      // Set all force to 0 for calculation of next iteration
+      bodies[i].forceX = 0;
+      bodies[i].forceY = 0;
+      bodies[i].forceZ = 0;
+    // }
   }
 }
 
@@ -162,44 +165,64 @@ void updateBody() {
   
   // Step 1.1: All bodies interact and move
   for (int i=0; i < NumberOfBodies; ++i) {
-    for (int j=0; j < NumberOfBodies; ++j) {
-      if (i != j) {
-        // Distance between body i and every other body
-    		const double distance = sqrt(
-      		(bodies[i].positionX-bodies[j].positionX) * (bodies[i].positionX-bodies[j].positionX) +
-      		(bodies[i].positionY-bodies[j].positionY) * (bodies[i].positionY-bodies[j].positionY) +
-      		(bodies[i].positionZ-bodies[j].positionZ) * (bodies[i].positionZ-bodies[j].positionZ)
-    		);
+    // if (bodies[i].isActive) {
+      for (int j=0; j < NumberOfBodies; ++j) {
+        if (i != j) {
+          // Distance between body i and every other body
+          const double distance = sqrt(
+            (bodies[i].positionX-bodies[j].positionX) * (bodies[i].positionX-bodies[j].positionX) +
+            (bodies[i].positionY-bodies[j].positionY) * (bodies[i].positionY-bodies[j].positionY) +
+            (bodies[i].positionZ-bodies[j].positionZ) * (bodies[i].positionZ-bodies[j].positionZ)
+          );
 
-        // DEBUG
-        // printf("\nDistance : %5.7f", distance); 
-        
-        // TODO: Decrease time step size as min distance gets closer 
-        // TODO: If distance < 1e-8 then fuse the bodies
-        if (distance < 1e-8) {
-          printf("Should collide with distance : %5.2f", distance);
+          // DEBUG
+          // printf("\nDistance : %5.7f", distance); 
 
+          // TODO: Decrease time step size as min distance gets closer 
+          // TODO: If distance < 1e-8 then fuse the bodies
+          if (distance < 1e-8) {
+            printf("Should collide with distance : %5.2f", distance);
 
+          }
+
+          // } else {
+            double massDistance = bodies[i].mass * bodies[j].mass / (distance * distance * distance);
+
+            // Calculate the force between body and the others
+            bodies[i].forceX += (bodies[j].positionX-bodies[i].positionX) * massDistance ;
+            bodies[i].forceY += (bodies[j].positionY-bodies[i].positionY) * massDistance ;
+            bodies[i].forceZ += (bodies[j].positionZ-bodies[i].positionZ) * massDistance ;
+          // }
+
+          // Increase time step
+          t += timeStepSize;
         }
-
-        // } else {
-          double massDistance = bodies[i].mass * bodies[j].mass / (distance * distance * distance);
-
-          // Calculate the force between body and the others
-          bodies[i].forceX += (bodies[j].positionX-bodies[i].positionX) * massDistance ;
-          bodies[i].forceY += (bodies[j].positionY-bodies[i].positionY) * massDistance ;
-          bodies[i].forceZ += (bodies[j].positionZ-bodies[i].positionZ) * massDistance ;
-        // }
-
-        // Increase time step
-        t += timeStepSize;
       }
+
+      printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
-
-    printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
-  }
-
+  // }
   updatePosition(timeStepSize);
+}
+
+
+void fuseBody(Body body1, Body body2) {
+  // Combine mass
+  double newMass = (body1.mass + body2.mass);
+
+  // Calculate velocity of new body
+  double newVelocityX = ((body1.mass * body1.velocityX) + (body2.mass * body2.velocityX)) / newMass;
+  double newVelocityY = ((body1.mass * body1.velocityY) + (body2.mass * body2.velocityY)) / newMass;
+  double newVelocityZ = ((body1.mass * body1.velocityZ) + (body2.mass * body2.velocityZ)) / newMass;
+
+  // Update one of the bodies to take on value of the new body
+  body1.mass = newMass;
+  body1.velocityX = newVelocityX;
+  body1.velocityY = newVelocityY;
+  body1.velocityZ = newVelocityZ;
+
+  // TODO: Figure out how to remove body 2 from the simulation completely
+  body2.isActive = false;
 }
 
 
@@ -235,6 +258,7 @@ int main(int argc, char** argv) {
     updateBody();
     timeStepsSinceLastPlot++;
     if (timeStepsSinceLastPlot%plotEveryKthStep==0) {
+      // TODO: Uncomment this so you can use Paraview at the end
       // printParaviewSnapshot(timeStepsSinceLastPlot/plotEveryKthStep);
     }
   }
