@@ -1,6 +1,6 @@
 // Translate this file with
 //
-// g++ -O3 --std=c++11 spaceboddies.c -o spacebodies
+// g++ -O3 --std=c++11 spacebodies.c -o spacebodies
 //
 // Run it with
 //
@@ -135,8 +135,7 @@ void updatePosition(const double timeStepSize) {
   double deltaT = (timeStepSize * timeStepSize) / 2;
 
   for (int i=0; i < NumberOfBodies; ++i) {
-    // Update only the active bodies
-    // if (bodies[i].isActive) {
+    if (bodies[i].isActive) {
       accelerationX = bodies[i].forceX / bodies[i].mass;
       accelerationY = bodies[i].forceY / bodies[i].mass;
       accelerationZ = bodies[i].forceZ / bodies[i].mass;
@@ -153,19 +152,39 @@ void updatePosition(const double timeStepSize) {
       bodies[i].forceX = 0;
       bodies[i].forceY = 0;
       bodies[i].forceZ = 0;
-    // }
+    }
   }
 }
+
+
+void fuseBodies(Body body1, Body body2) {
+  double combinedMass = body1.mass + body2.mass;
+
+  double newVelX = ((body1.mass * body1.velocityX) + (body2.mass * body2.velocityX)) / combinedMass;
+  double newVelY = ((body1.mass * body1.velocityY) + (body2.mass * body2.velocityY)) / combinedMass;
+  double newVelZ = ((body1.mass * body1.velocityZ) + (body2.mass * body2.velocityZ)) / combinedMass;
+  
+  body1.mass = combinedMass;
+  body1.velocityX = newVelX;
+  body1.velocityY = newVelY;
+  body1.velocityZ = newVelZ;
+  printf("\n=====> New combined body : %5.7f, %5.7f, %5.7f, %5.7f", body1.mass, body1.velocityX, body1.velocityY, body1.velocityZ);
+
+  body2.isActive = false;
+  // TRUE: 1; FALSE: 0
+  printf("\nBody 2 is active : %d", body2.isActive);
+}
+
 
 // Part 2: If you have two bodies headed towards each other then they must collide
 // Part 3: Make the time step change according to how close the bodies are to one another so that the particles don't just pass through each other
 void updateBody() {
 
-  const double timeStepSize = 0.0000001;
+  const double timeStepSize = 0.000001;
   
   // Step 1.1: All bodies interact and move
   for (int i=0; i < NumberOfBodies; ++i) {
-    // if (bodies[i].isActive) {
+    if (bodies[i].isActive) {
       for (int j=0; j < NumberOfBodies; ++j) {
         if (i != j) {
           // Distance between body i and every other body
@@ -176,13 +195,13 @@ void updateBody() {
           );
 
           // DEBUG
-          // printf("\nDistance : %5.7f", distance); 
-
+          printf("\nDistance : %5.7f", distance); 
+          
           // TODO: Decrease time step size as min distance gets closer 
           // TODO: If distance < 1e-8 then fuse the bodies
           if (distance < 1e-8) {
-            printf("Should collide with distance : %5.2f", distance);
-
+            printf("\n -------------- Should collide with distance : %5.7f", distance);
+            fuseBodies(bodies[i], bodies[j]);
           }
 
           // } else {
@@ -198,31 +217,14 @@ void updateBody() {
           t += timeStepSize;
         }
       }
+    }
 
+    if (bodies[i].isActive) {
       printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
-  // }
+  }
+
   updatePosition(timeStepSize);
-}
-
-
-void fuseBody(Body body1, Body body2) {
-  // Combine mass
-  double newMass = (body1.mass + body2.mass);
-
-  // Calculate velocity of new body
-  double newVelocityX = ((body1.mass * body1.velocityX) + (body2.mass * body2.velocityX)) / newMass;
-  double newVelocityY = ((body1.mass * body1.velocityY) + (body2.mass * body2.velocityY)) / newMass;
-  double newVelocityZ = ((body1.mass * body1.velocityZ) + (body2.mass * body2.velocityZ)) / newMass;
-
-  // Update one of the bodies to take on value of the new body
-  body1.mass = newMass;
-  body1.velocityX = newVelocityX;
-  body1.velocityY = newVelocityY;
-  body1.velocityZ = newVelocityZ;
-
-  // TODO: Figure out how to remove body 2 from the simulation completely
-  body2.isActive = false;
 }
 
 
@@ -258,7 +260,6 @@ int main(int argc, char** argv) {
     updateBody();
     timeStepsSinceLastPlot++;
     if (timeStepsSinceLastPlot%plotEveryKthStep==0) {
-      // TODO: Uncomment this so you can use Paraview at the end
       // printParaviewSnapshot(timeStepsSinceLastPlot/plotEveryKthStep);
     }
   }
