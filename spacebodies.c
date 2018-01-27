@@ -32,6 +32,7 @@ double t = 0;
 double tFinal = 0;
 
 int NumberOfBodies = 0;
+int NumInactive = 0;
 
 Body *bodies;
 
@@ -103,11 +104,14 @@ void printParaviewSnapshot(int counter) {
   std::ofstream out( filename.str().c_str() );
   out << "<VTKFile type=\"PolyData\" >" << std::endl
       << "<PolyData>" << std::endl
-      << " <Piece NumberOfPoints=\"" << NumberOfBodies << "\">" << std::endl
+      << " <Piece NumberOfPoints=\"" << NumberOfBodies - NumInactive << "\">" << std::endl
       << "  <Points>" << std::endl
       << "   <DataArray type=\"Float32\" NumberOfComponents=\"3\" format=\"ascii\">";
 
   for (int i=0; i < NumberOfBodies; ++i) {
+    if (!bodies[i].isActive) {
+      continue;
+    }
     out << bodies[i].positionX
         << " "
         << bodies[i].positionY
@@ -152,79 +156,90 @@ void updatePosition(const double timeStepSize) {
       bodies[i].forceX = 0;
       bodies[i].forceY = 0;
       bodies[i].forceZ = 0;
+    
+      // printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
   }
 }
 
 
-void fuseBodies(Body body1, Body body2) {
-  double combinedMass = body1.mass + body2.mass;
+void fuseBodies(Body* a, Body* b) {
+  double combinedMass = a->mass + b->mass;
 
-  double newVelX = ((body1.mass * body1.velocityX) + (body2.mass * body2.velocityX)) / combinedMass;
-  double newVelY = ((body1.mass * body1.velocityY) + (body2.mass * body2.velocityY)) / combinedMass;
-  double newVelZ = ((body1.mass * body1.velocityZ) + (body2.mass * body2.velocityZ)) / combinedMass;
+  double newVelX = ((a->mass * a->velocityX) + (b->mass * b->velocityX)) / combinedMass;
+  double newVelY = ((a->mass * a->velocityY) + (b->mass * b->velocityY)) / combinedMass;
+  double newVelZ = ((a->mass * a->velocityZ) + (b->mass * b->velocityZ)) / combinedMass;
   
-  body1.mass = combinedMass;
-  body1.velocityX = newVelX;
-  body1.velocityY = newVelY;
-  body1.velocityZ = newVelZ;
-  printf("\n=====> New combined body : %5.7f, %5.7f, %5.7f, %5.7f", body1.mass, body1.velocityX, body1.velocityY, body1.velocityZ);
+  // printf("\n=====> Old body a: %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
+  // printf("\n=====> Old body b: %5.10f, %5.10f, %5.10f, %5.10f", b->mass, b->velocityX, b->velocityY, b->velocityZ);
 
-  body2.isActive = false;
-  // TRUE: 1; FALSE: 0
-  printf("\nBody 2 is active : %d", body2.isActive);
+  a->mass = combinedMass;
+  a->velocityX = newVelX;
+  a->velocityY = newVelY;
+  a->velocityZ = newVelZ;
+
+  printf("\n=====> New combined body : %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
+
+  b->isActive = false;
+  NumInactive += 1;
 }
 
 
+double calculate_distance(Body a, Body b) {
+  return sqrt(
+    (a.positionX-b.positionX) * (a.positionX-b.positionX) +
+    (a.positionY-b.positionY) * (a.positionY-b.positionY) +
+    (a.positionZ-b.positionZ) * (a.positionZ-b.positionZ)
+  );
+}
+
+void addForce(Body* a, Body* b, double distance) {
+  double massDistance = a->mass * b->mass / (distance * distance * distance);
+  // Calculate the force between body and the others
+  a->forceX += (b->positionX-a->positionX) * massDistance ;
+  a->forceY += (b->positionY-a->positionY) * massDistance ;
+  a->forceZ += (b->positionZ-a->positionZ) * massDistance ;
+}
+
+void calcualteEffect(int a_index, int b_index) {
+  Body* a = &bodies[a_index];
+  Body* b = &bodies[b_index];
+  const double distance = calculate_distance(*a, *b);
+
+  // DEBUG
+  // printf("\nDistance : %5.7f", distance); 
+  
+  if (distance < 4e-1) {
+    printf("\n -------------- Bodies %d and %d should collide with distance : %5.7f", a_index, b_index, distance);
+    fuseBodies(a, b);
+  } else {
+    addForce(a, b, distance);
+    addForce(b, a, distance);
+  }
+}
+
 // Part 2: If you have two bodies headed towards each other then they must collide
 // Part 3: Make the time step change according to how close the bodies are to one another so that the particles don't just pass through each other
-void updateBody() {
+void updateBodies() {
 
-  const double timeStepSize = 0.000001;
+  const double timeStepSize = 1e-1;
   
   // Step 1.1: All bodies interact and move
   for (int i=0; i < NumberOfBodies; ++i) {
     if (bodies[i].isActive) {
-      for (int j=0; j < NumberOfBodies; ++j) {
-        if (i != j) {
-          // Distance between body i and every other body
-          const double distance = sqrt(
-            (bodies[i].positionX-bodies[j].positionX) * (bodies[i].positionX-bodies[j].positionX) +
-            (bodies[i].positionY-bodies[j].positionY) * (bodies[i].positionY-bodies[j].positionY) +
-            (bodies[i].positionZ-bodies[j].positionZ) * (bodies[i].positionZ-bodies[j].positionZ)
-          );
-
-          // DEBUG
-          printf("\nDistance : %5.7f", distance); 
-          
-          // TODO: Decrease time step size as min distance gets closer 
-          // TODO: If distance < 1e-8 then fuse the bodies
-          if (distance < 1e-8) {
-            printf("\n -------------- Should collide with distance : %5.7f", distance);
-            fuseBodies(bodies[i], bodies[j]);
-          }
-
-          // } else {
-            double massDistance = bodies[i].mass * bodies[j].mass / (distance * distance * distance);
-
-            // Calculate the force between body and the others
-            bodies[i].forceX += (bodies[j].positionX-bodies[i].positionX) * massDistance ;
-            bodies[i].forceY += (bodies[j].positionY-bodies[i].positionY) * massDistance ;
-            bodies[i].forceZ += (bodies[j].positionZ-bodies[i].positionZ) * massDistance ;
-          // }
-
-          // Increase time step
-          t += timeStepSize;
+      for (int j=i+1; j < NumberOfBodies; ++j) {
+        if (bodies[j].isActive) {
+          calcualteEffect(i, j);
         }
       }
-    }
-
-    if (bodies[i].isActive) {
-      printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
   }
 
   updatePosition(timeStepSize);
+
+  // TODO: Decrease time step size as min distance gets closer 
+  // Increase time
+  t += timeStepSize;
 }
 
 
@@ -254,17 +269,18 @@ int main(int argc, char** argv) {
   openParaviewVideoFile();
   printParaviewSnapshot(0);
 
-  int timeStepsSinceLastPlot = 0;
-  const int plotEveryKthStep = 100;
+  int currentTimeSteps = 0;
+  const int plotEveryKthStep = 1;
   while (t<=tFinal) {
-    updateBody();
-    timeStepsSinceLastPlot++;
-    if (timeStepsSinceLastPlot%plotEveryKthStep==0) {
-      // printParaviewSnapshot(timeStepsSinceLastPlot/plotEveryKthStep);
+    updateBodies();
+    currentTimeSteps++;
+    if (currentTimeSteps%plotEveryKthStep==0) {
+      // std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
+      printParaviewSnapshot(currentTimeSteps/plotEveryKthStep);
     }
   }
 
-  // closeParaviewVideoFile();
+  closeParaviewVideoFile();
 
   return 0;
 }
