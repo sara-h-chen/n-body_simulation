@@ -19,6 +19,7 @@
 #include <math.h>
 #include <vector>
 #include <cstdio>
+#include <limits>
 
 struct Body {
   double mass;
@@ -30,6 +31,11 @@ struct Body {
 
 double t = 0;
 double tFinal = 0;
+double timeStepSize = 1e-5;
+
+// For dynamic time steps
+double smallestDistance = std::numeric_limits<double>::infinity();
+int iteration = 2;
 
 int NumberOfBodies = 0;
 int NumInactive = 0;
@@ -38,6 +44,7 @@ Body *bodies;
 
 std::ofstream videoFile;
 
+// TODO: Remove all debug statements and uncomment Paraview statements
 
 // ----------------------------------------------------
 //                    SETUP FUNCTION
@@ -157,7 +164,8 @@ void updatePosition(const double timeStepSize) {
       bodies[i].forceY = 0;
       bodies[i].forceZ = 0;
     
-      // printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
+      // DEBUG
+      printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
   }
 }
@@ -170,6 +178,7 @@ void fuseBodies(Body* a, Body* b) {
   double newVelY = ((a->mass * a->velocityY) + (b->mass * b->velocityY)) / combinedMass;
   double newVelZ = ((a->mass * a->velocityZ) + (b->mass * b->velocityZ)) / combinedMass;
   
+  // DEBUG
   // printf("\n=====> Old body a: %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
   // printf("\n=====> Old body b: %5.10f, %5.10f, %5.10f, %5.10f", b->mass, b->velocityX, b->velocityY, b->velocityZ);
 
@@ -178,6 +187,7 @@ void fuseBodies(Body* a, Body* b) {
   a->velocityY = newVelY;
   a->velocityZ = newVelZ;
 
+  // DEBUG
   printf("\n=====> New combined body : %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
 
   b->isActive = false;
@@ -205,11 +215,34 @@ void calcualteEffect(int a_index, int b_index) {
   Body* a = &bodies[a_index];
   Body* b = &bodies[b_index];
   const double distance = calculate_distance(*a, *b);
+  // TODO: As distance grows smaller, divide the timestep
+  // Keep track of smallest distance
+  if (distance < smallestDistance) {
+    smallestDistance = distance;
+    if (smallestDistance < 0.1) {
+      
+      // if (smallestDistance < (lastAugmentedDistance / iteration)) {
+        double logValue = (1e-6 * log(iteration * distance));
+        if (timeStepSize + logValue > 0) {
+          timeStepSize += logValue;
+          iteration += 1;
+        } else if (timeStepSize > 1e-8) {
+          // TODO: Figure out how to scale the timestep
+          timeStepSize += (1e-6 * log((iteration * 2) * distance));
+        }
+        // lastAugmentedDistance = smallestDistance / iteration;
+        // DEBUG
+        std::cout << "\n Time ==== " << timeStepSize << std::endl;
+      // }
+    }
+  }
 
   // DEBUG
-  // printf("\nDistance : %5.7f", distance); 
+  printf("\nSmallest distance: %5.7f  ------ Distance : %5.7f", smallestDistance, distance); 
   
-  if (distance < 4e-1) {
+  // TODO: Change this to 1e-8
+  if (distance < 1e-8) {
+    // DEBUG
     printf("\n -------------- Bodies %d and %d should collide with distance : %5.7f", a_index, b_index, distance);
     fuseBodies(a, b);
   } else {
@@ -218,11 +251,12 @@ void calcualteEffect(int a_index, int b_index) {
   }
 }
 
-// Part 2: If you have two bodies headed towards each other then they must collide
 // Part 3: Make the time step change according to how close the bodies are to one another so that the particles don't just pass through each other
 void updateBodies() {
 
-  const double timeStepSize = 1e-1;
+  // TODO: Change this timeStepSize;
+  // move to global
+  const double timeStepSize = 1e-3;
   
   // Step 1.1: All bodies interact and move
   for (int i=0; i < NumberOfBodies; ++i) {
@@ -237,7 +271,6 @@ void updateBodies() {
 
   updatePosition(timeStepSize);
 
-  // TODO: Decrease time step size as min distance gets closer 
   // Increase time
   t += timeStepSize;
 }
@@ -266,8 +299,8 @@ int main(int argc, char** argv) {
   }
 
   setUp(argc,argv);
-  openParaviewVideoFile();
-  printParaviewSnapshot(0);
+  // openParaviewVideoFile();
+  // printParaviewSnapshot(0);
 
   int currentTimeSteps = 0;
   const int plotEveryKthStep = 1;
@@ -275,12 +308,15 @@ int main(int argc, char** argv) {
     updateBodies();
     currentTimeSteps++;
     if (currentTimeSteps%plotEveryKthStep==0) {
+      
+      // DEBUG
       // std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
-      printParaviewSnapshot(currentTimeSteps/plotEveryKthStep);
+
+      // printParaviewSnapshot(currentTimeSteps/plotEveryKthStep);
     }
   }
 
-  closeParaviewVideoFile();
+  // closeParaviewVideoFile();
 
   return 0;
 }
