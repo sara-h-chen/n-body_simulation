@@ -35,7 +35,6 @@ double timeStepSize = 1e-5;
 
 // For dynamic time steps
 double minDistance = std::numeric_limits<double>::infinity();
-// int iteration = 2;
 
 int numberOfBodies = 0;
 int NumInactive = 0;
@@ -43,10 +42,35 @@ int NumInactive = 0;
 Body *bodies;
 // Keeps track of the next state
 Body *forecastedState;
+Body *copyState;
 
 std::ofstream videoFile;
 
 // TODO: Remove all debug statements and uncomment Paraview statements
+
+// ----------------------------------------------------
+//                  UTILITY FUNCTIONS
+// ----------------------------------------------------
+
+void deepCopy(Body* dest, Body* src) {
+    for (int i=0; i < numberOfBodies; ++i) {
+        dest[i].positionX = src[i].positionX;
+        dest[i].positionY = src[i].positionY;
+        dest[i].positionZ = src[i].positionZ;
+
+        dest[i].velocityX = src[i].velocityX;
+        dest[i].velocityY = src[i].velocityY;
+        dest[i].velocityZ = src[i].velocityZ;
+
+        dest[i].isActive = src[i].isActive;
+        dest[i].mass = src[i].mass;
+
+        // Set all force to 0 for calculation of next iteration
+        copyState[i].forceX = 0;
+        copyState[i].forceY = 0;
+        copyState[i].forceZ = 0;
+    }
+}
 
 // ----------------------------------------------------
 //                    SETUP FUNCTION
@@ -57,6 +81,7 @@ void setUp(int argc, char** argv) {
 
   bodies = new Body[numberOfBodies];
   forecastedState = new Body[numberOfBodies];
+  copyState = new Body[numberOfBodies];
 
   int readArgument = 1;
 
@@ -64,24 +89,39 @@ void setUp(int argc, char** argv) {
 
   // Process each body separately
   for (int i=0; i < numberOfBodies; ++i) {
-    // The first three numbers passed into the command line are the x variables
-    // representing the position of the particle
-    bodies[i].positionX = std::stof(argv[readArgument]); readArgument++;
-    bodies[i].positionY = std::stof(argv[readArgument]); readArgument++;
-    bodies[i].positionZ = std::stof(argv[readArgument]); readArgument++;
+      // The first three numbers passed into the command line are the x variables
+      // representing the position of the particle
+      bodies[i].positionX = std::stof(argv[readArgument]);
+      forecastedState[i].positionX = std::stof(argv[readArgument]);
+      readArgument++;
+      bodies[i].positionY = std::stof(argv[readArgument]);
+      forecastedState[i].positionY = std::stof(argv[readArgument]);
+      readArgument++;
+      bodies[i].positionZ = std::stof(argv[readArgument]);
+      forecastedState[i].positionZ = std::stof(argv[readArgument]);
+      readArgument++;
 
-    // The next three numbers passed in represent the velocity vectors
-    bodies[i].velocityX = std::stof(argv[readArgument]); readArgument++;
-    bodies[i].velocityY = std::stof(argv[readArgument]); readArgument++;
-    bodies[i].velocityZ = std::stof(argv[readArgument]); readArgument++;
+      // The next three numbers passed in represent the velocity vectors
+      bodies[i].velocityX = std::stof(argv[readArgument]);
+      forecastedState[i].velocityX = std::stof(argv[readArgument]);
+      readArgument++;
+      bodies[i].velocityY = std::stof(argv[readArgument]);
+      forecastedState[i].velocityY = std::stof(argv[readArgument]);
+      readArgument++;
+      bodies[i].velocityZ = std::stof(argv[readArgument]);
+      forecastedState[i].velocityZ = std::stof(argv[readArgument]);
+      readArgument++;
 
-    bodies[i].mass = std::stof(argv[readArgument]); readArgument++;
-    bodies[i].isActive = true;
+      bodies[i].mass = std::stof(argv[readArgument]);
+      forecastedState[i].mass = std::stof(argv[readArgument]);
+      readArgument++;
+      bodies[i].isActive = true;
+      forecastedState[i].isActive = true;
 
-    if (bodies[i].mass<=0.0 ) {
-      std::cerr << "invalid mass for body " << i << std::endl;
-      exit(-2);
-    }
+      if (bodies[i].mass <= 0.0) {
+          std::cerr << "invalid mass for body " << i << std::endl;
+          exit(-2);
+      }
   }
 
   std::cout << "created setup with " << numberOfBodies << " bodies" << std::endl;
@@ -167,15 +207,15 @@ void updatePosition(const double timeStepSize) {
       bodies[i].forceX = 0;
       bodies[i].forceY = 0;
       bodies[i].forceZ = 0;
-    
+
       // DEBUG
-      printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
+      // printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
     }
   }
 }
 
 
-void makeForecast(double localTimeStep, double previousDistance) {
+void makeForecast(double localTimeStep) {
   double accX, accY, accZ;
   double delT = (localTimeStep * localTimeStep) / 2;
 
@@ -199,25 +239,13 @@ void makeForecast(double localTimeStep, double previousDistance) {
   }
 }
 
-bool forecastedDistanceExceedsHalf(Body a, Body b, double originalDistance) {
-  double forecastedDistance = sqrt(
-    (a.positionX-b.positionX) * (a.positionX-b.positionX) +
-    (a.positionY-b.positionY) * (a.positionY-b.positionY) +
-    (a.positionZ-b.positionZ) * (a.positionZ-b.positionZ)
-  );
-
-  std::cout << " ----->> " << (forecastedDistance < (0.5 * originalDistance)) << std::endl;
-  return (forecastedDistance < (0.5 * originalDistance));
-}
-
-
 void fuseBodies(Body* a, Body* b) {
   double combinedMass = a->mass + b->mass;
 
   double newVelX = ((a->mass * a->velocityX) + (b->mass * b->velocityX)) / combinedMass;
   double newVelY = ((a->mass * a->velocityY) + (b->mass * b->velocityY)) / combinedMass;
   double newVelZ = ((a->mass * a->velocityZ) + (b->mass * b->velocityZ)) / combinedMass;
-  
+
   // DEBUG
   // printf("\n=====> Old body a: %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
   // printf("\n=====> Old body b: %5.10f, %5.10f, %5.10f, %5.10f", b->mass, b->velocityX, b->velocityY, b->velocityZ);
@@ -228,25 +256,18 @@ void fuseBodies(Body* a, Body* b) {
   a->velocityZ = newVelZ;
 
   // DEBUG
-  printf("\n=====> New combined body : %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
+  // printf("\n=====> New combined body : %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
 
   b->isActive = false;
   NumInactive += 1;
 }
 
-
 double calculateDistance(Body a, Body b) {
-  double proposedDistance = sqrt(
+  return sqrt(
     (a.positionX-b.positionX) * (a.positionX-b.positionX) +
     (a.positionY-b.positionY) * (a.positionY-b.positionY) +
     (a.positionZ-b.positionZ) * (a.positionZ-b.positionZ)
   );
-
-  if (proposedDistance < minDistance) {
-    minDistance = proposedDistance;
-  }
-
-  return proposedDistance;
 }
 
 void addForce(Body* a, Body* b, double distance) {
@@ -262,48 +283,37 @@ void calculateEffect(int a_index, int b_index) {
   Body* a = &bodies[a_index];
   Body* b = &bodies[b_index];
 
+  // Current state
   double localTimeStep = 1e-5;
   const double distance = calculateDistance(*a, *b);
 
-  makeForecast(localTimeStep, distance);
   Body* forecastedA = &forecastedState[a_index];
   Body* forecastedB = &forecastedState[b_index];
+  // Make prediction for next step
+  addForce(forecastedA, forecastedB, distance);
+  addForce(forecastedB, forecastedA, distance);
 
-  // While forecasted distance exceeds half, make timeStepSize smaller
-  while(forecastedDistanceExceedsHalf(*forecastedA, *forecastedB, distance)) {
-    std::cout << "entered while block" << std::endl;
-    localTimeStep = localTimeStep / 2;
-    if(timeStepSize > localTimeStep) {
-      timeStepSize = localTimeStep;
+  // Backup state
+  deepCopy(copyState, forecastedState);
+  // Move to state
+  makeForecast(localTimeStep);
+  double distanceBetweenBodies = calculateDistance(*forecastedA, *forecastedB);
+
+  // If no collision, they should be moving towards one another
+  if(forecastedA->isActive && forecastedB->isActive) {
+    // If they got further apart, then scale timestep
+    while(distanceBetweenBodies > distance) {
+      localTimeStep = localTimeStep - (localTimeStep / 2);
+      deepCopy(forecastedState, copyState);
+      makeForecast(localTimeStep);
+      distanceBetweenBodies = calculateDistance(*forecastedA, *forecastedB);
+      std::cout << distanceBetweenBodies << std::endl;
     }
+      timeStepSize = localTimeStep;
   }
+
   std::cout << "\nLocal time step: " << localTimeStep << ", global time step: " << timeStepSize << std::endl;
 
-
-
-  // // TODO: As distance grows smaller, divide the timestep
-  // // Keep track of smallest distance
-  //   if (smallestDistance < 0.1) {
-      
-  //     // if (smallestDistance < (lastAugmentedDistance / iteration)) {
-  //       double logValue = (1e-6 * log(iteration * distance));
-  //       if (timeStepSize + logValue > 0) {
-  //         timeStepSize += logValue;
-  //         iteration += 1;
-  //       } else if (timeStepSize > 1e-8) {
-  //         // TODO: Figure out how to scale the timestep
-  //         timeStepSize += (1e-6 * log((iteration * 2) * distance));
-  //       }
-  //       // lastAugmentedDistance = smallestDistance / iteration;
-  //       // DEBUG
-  //       std::cout << "\n Time ==== " << timeStepSize << std::endl;
-  //     // }
-  //   }
-  // }
-
-  // DEBUG
-  // printf("\nSmallest distance: %5.7f  ------ Distance : %5.7f", smallestDistance, distance); 
-  
   // TODO: Change this to 1e-8
   if (distance <= 1e-8) {
     // DEBUG
@@ -367,7 +377,7 @@ int main(int argc, char** argv) {
     updateBodies();
     currentTimeSteps++;
     if (currentTimeSteps%plotEveryKthStep==0) {
-      
+
       // DEBUG
       // std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
 
