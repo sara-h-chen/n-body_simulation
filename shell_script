@@ -1,0 +1,29 @@
+#!/bin/bash
+# Random number generator
+
+MAXCOUNT=$1
+count=0
+
+if [ "$1" != "" ]; then
+	while [ "$count" -lt $MAXCOUNT ]
+	do	
+		# position and velocity
+		for block in 1 2
+		do
+			# for x y z
+			for i in 1 2 3
+			do
+    				number=$((RANDOM/RANDOM))
+    				decimal=$RANDOM
+    				printf "%d.%d " $number $decimal
+			done
+		done
+		weight=$((RANDOM/RANDOM))
+		weight_decimal=$RANDOM
+		printf "%d.%d   " $weight $weight_decimal
+    		let "count += 1"
+	done
+else
+	echo "Positional parameter 1 is empty. Give a number."
+fi
+

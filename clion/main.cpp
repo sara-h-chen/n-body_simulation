@@ -20,6 +20,8 @@
 #include <vector>
 #include <cstdio>
 #include <limits>
+//#include "../matplotlib-cpp/matplotlibcpp.h"
+//#include <Python/Python.h>
 
 struct Body {
     double mass;
@@ -29,10 +31,13 @@ struct Body {
     bool isActive;
 };
 
+const double limit = 1e-10;
+const double defaultTime = 1e-5;
+
 double t = 0;
 double tFinal = 0;
+// TODO: Ensure this is always 1e-5
 double timeStepSize = 1e-5;
-const double limit = 1e-10;
 bool adaptiveTimeStep = true;
 
 int numberOfBodies = 0;
@@ -217,7 +222,9 @@ void updatePosition() {
             bodies[i].forceZ = 0;
 
             // DEBUG
-            // printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
+//            if (bodies[i].positionX >= 0.09 && bodies[i].positionX <= 0.15) {
+//                printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
+//            }
         }
     }
 }
@@ -234,7 +241,8 @@ double scaleTimeStep(Body a, Body b, double distance) {
 
             makeForecast(a, b, tempBodyA, tempBodyB);
             double expectedDistance = calculateDistance(tempBodyA, tempBodyB);
-            printf("Expected distance : %7.8f \n", expectedDistance);
+//            printf("Expected distance : %7.8f \n", expectedDistance);
+//            printf("Scaled distance : %7.8f \n", distance);
 
             // If they are getting closer together
             if (expectedDistance - distance < 0) {
@@ -253,9 +261,6 @@ double scaleTimeStep(Body a, Body b, double distance) {
         }
     }
     return newTimeStep;
-//    while ((a->velocityX > 0) && (abs(timeStepSize * a->forceX / a->mass) / a->velocityX > epsilon)) {
-//        timeStepSize = timeStepSize / 2;
-//    }
 }
 
 
@@ -297,34 +302,10 @@ void calculateEffect(int a_index, int b_index) {
 
     // Current state
     double distance = calculateDistance(*a, *b);
-    printf("Distance: %7.8f \n", distance);
-
-//  Body* forecastedA = &forecastedState[a_index];
-//  Body* forecastedB = &forecastedState[b_index];
-//  // Make prediction for next step
-//  addForce(forecastedA, forecastedB, distance);
-//  addForce(forecastedB, forecastedA, distance);
-
-    // Backup state
-//  deepCopy(copyState, forecastedState);
-    // Move to state
-//  makeForecast(localTimeStep);
-//  double distanceBetweenBodies = calculateDistance(*forecastedA, *forecastedB);
-
-//  // TODO: Add adaptive time step
-//  // If no collision, they should be moving towards one another
-//  if(forecastedA->isActive && forecastedB->isActive) {
-//    // If they got further apart, then scale timestep
-//    while(distanceBetweenBodies > distance) {
-//      localTimeStep = localTimeStep - (localTimeStep / 2);
-//      deepCopy(forecastedState, copyState);
-//      makeForecast(localTimeStep);
-//      distanceBetweenBodies = calculateDistance(*forecastedA, *forecastedB);
-//      std::cout << distanceBetweenBodies << std::endl;
+    // DEBUG
+//    if (distance < 1e-5) {
+//        printf("Distance: %7.8f \n", distance);
 //    }
-//      timeStepSize = localTimeStep;
-//  }
-//  std::cout << "\nLocal time step: " << localTimeStep << ", global time step: " << timeStepSize << std::end
 
     if (adaptiveTimeStep) {
         timeStepSize = scaleTimeStep(*a, *b, distance);
@@ -332,10 +313,12 @@ void calculateEffect(int a_index, int b_index) {
 
     if (distance <= 1e-8) {
         // DEBUG
-        printf("\n -------------- Bodies %d and %d should collide with distance : %5.7f", a_index, b_index, distance);
-        int temp;
-        std::cin >> temp;
+        printf("\n -------------- Bodies %d and %d should collide with distance : %5.7f\n", a_index, b_index, distance);
+        printf("\nBody %d: %7.8f  %7.8f  %7.8f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
+        printf("\nBody %d: %7.8f  %7.8f  %7.8f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
+
         fuseBodies(a, b);
+        timeStepSize = defaultTime;
     } else {
         addForce(a, b, distance);
         addForce(b, a, distance);
