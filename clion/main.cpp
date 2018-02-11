@@ -15,13 +15,9 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <string>
 #include <math.h>
 #include <vector>
-#include <cstdio>
-#include <limits>
-//#include "../matplotlib-cpp/matplotlibcpp.h"
-//#include <Python/Python.h>
+#include <random>
 
 struct Body {
     double mass;
@@ -36,7 +32,6 @@ const double defaultTime = 1e-5;
 
 double t = 0;
 double tFinal = 0;
-// TODO: Ensure this is always 1e-5
 double timeStepSize = 1e-5;
 bool adaptiveTimeStep = true;
 
@@ -44,7 +39,6 @@ int numberOfBodies = 0;
 int NumInactive = 0;
 
 Body *bodies;
-Body *copyState;
 
 std::ofstream videoFile;
 
@@ -54,25 +48,25 @@ std::ofstream videoFile;
 //                  UTILITY FUNCTIONS
 // ----------------------------------------------------
 
-void deepCopy(Body *dest, Body *src) {
-    for (int i = 0; i < numberOfBodies; ++i) {
-        dest[i].positionX = src[i].positionX;
-        dest[i].positionY = src[i].positionY;
-        dest[i].positionZ = src[i].positionZ;
-
-        dest[i].velocityX = src[i].velocityX;
-        dest[i].velocityY = src[i].velocityY;
-        dest[i].velocityZ = src[i].velocityZ;
-
-        dest[i].isActive = src[i].isActive;
-        dest[i].mass = src[i].mass;
-
-        // Set all force to 0 for calculation of next iteration
-        copyState[i].forceX = 0;
-        copyState[i].forceY = 0;
-        copyState[i].forceZ = 0;
-    }
-}
+//void deepCopy(Body *dest, Body *src) {
+//    for (int i = 0; i < numberOfBodies; ++i) {
+//        dest[i].positionX = src[i].positionX;
+//        dest[i].positionY = src[i].positionY;
+//        dest[i].positionZ = src[i].positionZ;
+//
+//        dest[i].velocityX = src[i].velocityX;
+//        dest[i].velocityY = src[i].velocityY;
+//        dest[i].velocityZ = src[i].velocityZ;
+//
+//        dest[i].isActive = src[i].isActive;
+//        dest[i].mass = src[i].mass;
+//
+//        // Set all force to 0 for calculation of next iteration
+//        copyState[i].forceX = 0;
+//        copyState[i].forceY = 0;
+//        copyState[i].forceZ = 0;
+//    }
+//}
 
 double calculateDistance(Body a, Body b) {
     return sqrt(
@@ -90,7 +84,6 @@ void setUp(int argc, char **argv) {
     numberOfBodies = (argc - 2) / 7;
 
     bodies = new Body[numberOfBodies];
-    copyState = new Body[numberOfBodies];
 
     int readArgument = 1;
 
@@ -222,7 +215,7 @@ void updatePosition() {
             bodies[i].forceZ = 0;
 
             // DEBUG
-//            if (bodies[i].positionX >= 0.09 && bodies[i].positionX <= 0.15) {
+//            if (bodies[i].positionX >= 0.09 && bodies[i].positionX <= 0.10) {
 //                printf("\nBody %d: %7.8f  %7.8f  %7.8f", i, bodies[i].positionX, bodies[i].positionY, bodies[i].positionZ);
 //            }
         }
@@ -304,18 +297,23 @@ void calculateEffect(int a_index, int b_index) {
     double distance = calculateDistance(*a, *b);
     // DEBUG
 //    if (distance < 1e-5) {
-//        printf("Distance: %7.8f \n", distance);
+//        printf("Distance: %7.64f \n", distance);
+//        printf("\nBody %d: %7.64f  %7.64f  %7.64f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
+//        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
 //    }
 
     if (adaptiveTimeStep) {
         timeStepSize = scaleTimeStep(*a, *b, distance);
+        if (distance <= 1e-8) {
+            printf("adaptive time step: %7.30f ", timeStepSize);
+        }
     }
 
     if (distance <= 1e-8) {
         // DEBUG
-        printf("\n -------------- Bodies %d and %d should collide with distance : %5.7f\n", a_index, b_index, distance);
-        printf("\nBody %d: %7.8f  %7.8f  %7.8f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
-        printf("\nBody %d: %7.8f  %7.8f  %7.8f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
+        printf("\n -------------- Bodies %d and %d should collide with distance : %5.40f\n", a_index, b_index, distance);
+        printf("\nBody %d: %7.64f  %7.64f  %7.64f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
+        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
 
         fuseBodies(a, b);
         timeStepSize = defaultTime;
@@ -346,33 +344,96 @@ void updateBodies() {
 
 
 // ----------------------------------------------------
+//                RANDOM BODY GENERATOR
+// ----------------------------------------------------
+
+void createRandomBodies(int noOfBodies) {
+    std::random_device rd;
+    std::default_random_engine e2(rd());
+    std::uniform_real_distribution<> pos_dist(-1, 1);
+    std::uniform_real_distribution<> vel_dist(-10, 10);
+    std::uniform_real_distribution<> mass_dist(0, 1);
+
+    bodies = new Body[noOfBodies];
+
+    for (int i=0; i < noOfBodies; ++i) {
+        bodies[i].positionX = pos_dist(e2);
+        bodies[i].positionY = pos_dist(e2);
+        bodies[i].positionZ = pos_dist(e2);
+
+        bodies[i].velocityX = vel_dist(e2);
+        bodies[i].velocityY = vel_dist(e2);
+        bodies[i].velocityZ = vel_dist(e2);
+
+        bodies[i].mass = mass_dist(e2);
+        bodies[i].isActive = true;
+    }
+
+    std::cout << "created random setup with " << noOfBodies << " bodies" << std::endl;
+}
+
+// ----------------------------------------------------
+//                 COMMAND LINE PARSER
+// ----------------------------------------------------
+
+bool checkFlag(char** begin, char** end, const std::string &option)
+{
+    return std::find(begin, end, option) != end;
+}
+
+char* getCmdOption(char** begin, char** end, const std::string &option)
+{
+    char** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return 0;
+}
+
+// ----------------------------------------------------
 //                     MAIN METHOD
 // ----------------------------------------------------
 
 int main(int argc, char **argv) {
-    // Insufficient args
-    if (argc == 1) {
-        std::cerr << "please add the final time plus a list of object configurations as tuples px py pz vx vy vz m"
-                  << std::endl
-                  << std::endl
-                  << "Examples:" << std::endl
-                  << "100.0   0 0 0   1.0 0 0   1.0 \t One body moving form the coordinate system's centre along x axis with speed 1"
-                  << std::endl
-                  << "100.0   0 0 0   1.0 0 0   1.0     0 1.0 0   1.0 0 0   1.0 \t One spiralling around the other one"
-                  << std::endl
-                  << "100.0   3.0 0 0   0 1.0 0   0.4     0 0 0   0 0 0   0.2     2.0 0 0   0 0 0   1.0 \t Three body setup from first lecture"
-                  << std::endl
-                  << std::endl;
-        return -1;
-    }
-        // Mismatched args
-    else if ((argc - 2) % 7 != 0) {
-        std::cerr << "error in arguments: each planet is given by seven entries (position, velocity, mass)"
-                  << std::endl;
-        return -2;
+    clock_t t;
+    t = clock();
+
+    // Check if create bodies
+    if(checkFlag(argv, argv + argc, "-r")) {
+        // Set time step
+        tFinal = 100.0;
+
+        // Get number of bodies from command line
+        char* cmdOption = getCmdOption(argv, argv + argc, "-r");
+        int numberOfBodies = atoi(cmdOption);
+        createRandomBodies(numberOfBodies);
+    } else {
+        // Insufficient args
+        if (argc == 1) {
+            std::cerr << "please add the final time plus a list of object configurations as tuples px py pz vx vy vz m"
+                      << std::endl
+                      << std::endl
+                      << "Examples:" << std::endl
+                      << "100.0   0 0 0   1.0 0 0   1.0 \t One body moving form the coordinate system's centre along x axis with speed 1"
+                      << std::endl
+                      << "100.0   0 0 0   1.0 0 0   1.0     0 1.0 0   1.0 0 0   1.0 \t One spiralling around the other one"
+                      << std::endl
+                      << "100.0   3.0 0 0   0 1.0 0   0.4     0 0 0   0 0 0   0.2     2.0 0 0   0 0 0   1.0 \t Three body setup from first lecture"
+                      << std::endl
+                      << std::endl;
+            return -1;
+        }
+            // Mismatched args
+        else if ((argc - 2) % 7 != 0) {
+            std::cerr << "error in arguments: each planet is given by seven entries (position, velocity, mass)"
+                      << std::endl;
+            return -2;
+        }
+
+        setUp(argc, argv);
     }
 
-    setUp(argc, argv);
     // openParaviewVideoFile();
     // printParaviewSnapshot(0);
 
@@ -391,6 +452,10 @@ int main(int argc, char **argv) {
     }
 
     // closeParaviewVideoFile();
+
+    t = clock() - t;
+    double time_taken = ((double)t)/CLOCKS_PER_SEC;
+    printf("Time taken: %f \n", time_taken);
 
     return 0;
 }
