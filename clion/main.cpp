@@ -18,6 +18,10 @@
 #include <math.h>
 #include <vector>
 #include <random>
+#include <algorithm>
+#include <iomanip>
+// TODO: Uncomment and test parallelization
+//#include <omp.h>
 
 struct Body {
     double mass;
@@ -28,7 +32,6 @@ struct Body {
 };
 
 const double limit = 1e-10;
-const double defaultTime = 1e-5;
 
 double t = 0;
 double tFinal = 0;
@@ -41,6 +44,8 @@ int NumInactive = 0;
 Body *bodies;
 
 std::ofstream videoFile;
+std::ofstream bodyCountFile;
+
 
 // TODO: Remove all debug statements and uncomment Paraview statements
 
@@ -90,6 +95,7 @@ void setUp(int argc, char **argv) {
     tFinal = std::stof(argv[readArgument]);
     readArgument++;
 
+    // Cannot be parallel because of readArgument variable
     // Process each body separately
     for (int i = 0; i < numberOfBodies; ++i) {
         // The first three numbers passed into the command line are the x variables
@@ -192,6 +198,8 @@ void makeForecast(Body &a, Body &b, Body &tempBodyA, Body &tempBodyB) {
 void updatePosition() {
     double accelerationX, accelerationY, accelerationZ;
     double deltaT = (timeStepSize * timeStepSize) / 2;
+
+    #pragma omp parallel for private(accelerationX, accelerationY, accelerationZ)
     // Loop through bodies and update if active
     for (int i = 0; i < numberOfBodies; ++i) {
         if (bodies[i].isActive) {
@@ -276,6 +284,8 @@ void fuseBodies(Body *a, Body *b) {
     // printf("\n=====> New combined body : %5.10f, %5.10f, %5.10f, %5.10f", a->mass, a->velocityX, a->velocityY, a->velocityZ);
 
     b->isActive = false;
+    // Protect this variable against concurrent access
+    #pragma omp critical
     NumInactive += 1;
 }
 
@@ -301,33 +311,49 @@ void calculateEffect(int a_index, int b_index) {
 //        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
 //    }
 
+
     if (adaptiveTimeStep) {
-        timeStepSize = scaleTimeStep(*a, *b, distance);
+        double thisTimeStep = scaleTimeStep(*a, *b, distance);
+        #pragma omp critical
+        if (thisTimeStep < timeStepSize) {
+            timeStepSize = thisTimeStep;
+        }
+    }
+
+//    if (adaptiveTimeStep) {
+//        timeStepSize = scaleTimeStep(*a, *b, distance);
         // DEBUG
 //        if (distance <= 1e-8) {
 //            printf("adaptive time step: %7.30f ", timeStepSize);
 //        }
-    }
+//    }
 
-    if (distance <= 1e-8) {
+    if (distance > 1e-8) {
+        addForce(a, b, distance);
+        addForce(b, a, distance);
+    } else {
         // DEBUG
 //        printf("\n -------------- Bodies %d and %d should collide with distance : %5.40f\n", a_index, b_index, distance);
 //        printf("\nBody %d: %7.64f  %7.64f  %7.64f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
 //        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
 
-        fuseBodies(a, b);
-        timeStepSize = defaultTime;
-    } else {
-        addForce(a, b, distance);
-        addForce(b, a, distance);
+        // Wait for all threads to reach here; synchronize
+        // Continue with only one thread
+        #pragma omp barrier
+        #pragma omp single
+        {
+            fuseBodies(a, b);
+        }
     }
 }
 
 // Part 3: Make the time step change according to how close the bodies are to one another so that the particles don't just pass through each other
 void updateBodies() {
     // Step 1.1: All bodies interact and move
+    #pragma omp parallel for
     for (int i = 0; i < numberOfBodies; ++i) {
         if (bodies[i].isActive) {
+            // Cannot parallelize inner loop because function fuseBodies creates race condition
             for (int j = i + 1; j < numberOfBodies; ++j) {
                 if (bodies[j].isActive) {
                     calculateEffect(i, j);
@@ -355,6 +381,7 @@ void createRandomBodies(int noOfBodies) {
 
     bodies = new Body[noOfBodies];
 
+    #pragma omp parallel for
     for (int i = 0; i < noOfBodies; ++i) {
         bodies[i].positionX = pos_dist(e2);
         bodies[i].positionY = pos_dist(e2);
@@ -400,13 +427,15 @@ char* getCmdOption(char** begin, char** end, const std::string &option)
 // ----------------------------------------------------
 
 int main(int argc, char **argv) {
+
     clock_t tStart;
     tStart = clock();
+    bodyCountFile.open("./body_count.csv");
 
     // Check if create bodies
     if(checkFlag(argv, argv + argc, "-r")) {
         // Set time step
-        tFinal = 100.0;
+        tFinal = 10.0;
 
         // Get number of bodies from command line
         char* cmdOption = getCmdOption(argv, argv + argc, "-r");
@@ -444,18 +473,18 @@ int main(int argc, char **argv) {
     int currentTimeSteps = 0;
     const int plotEveryKthStep = 100;
     while (t <= tFinal) {
-        updateBodies();
-        currentTimeSteps++;
         if (currentTimeSteps % plotEveryKthStep == 0) {
 
             // DEBUG
-            // std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
+//             std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
 
             // Print number of bodies
-            printf("%d, %d\n", currentTimeSteps, (numberOfBodies - NumInactive));
+            bodyCountFile << currentTimeSteps << ", " << std::to_string(numberOfBodies - NumInactive) << std::endl;
 
             // printParaviewSnapshot(currentTimeSteps/plotEveryKthStep);
         }
+        updateBodies();
+        currentTimeSteps++;
     }
 
     // closeParaviewVideoFile();
@@ -465,5 +494,6 @@ int main(int argc, char **argv) {
     printf("Time taken: %f \n", time_taken);
 //    std::cout << time_taken << std::endl;
 
+    bodyCountFile.close();
     return 0;
 }
