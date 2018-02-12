@@ -33,7 +33,7 @@ const double defaultTime = 1e-5;
 double t = 0;
 double tFinal = 0;
 double timeStepSize = 1e-5;
-bool adaptiveTimeStep = true;
+bool adaptiveTimeStep = false;
 
 int numberOfBodies = 0;
 int NumInactive = 0;
@@ -121,7 +121,6 @@ void setUp(int argc, char **argv) {
 
     std::cout << "created setup with " << numberOfBodies << " bodies" << std::endl;
 }
-
 
 // ----------------------------------------------------
 //              PARAVIEW RELATED FUNCTIONS
@@ -304,16 +303,17 @@ void calculateEffect(int a_index, int b_index) {
 
     if (adaptiveTimeStep) {
         timeStepSize = scaleTimeStep(*a, *b, distance);
-        if (distance <= 1e-8) {
-            printf("adaptive time step: %7.30f ", timeStepSize);
-        }
+        // DEBUG
+//        if (distance <= 1e-8) {
+//            printf("adaptive time step: %7.30f ", timeStepSize);
+//        }
     }
 
     if (distance <= 1e-8) {
         // DEBUG
-        printf("\n -------------- Bodies %d and %d should collide with distance : %5.40f\n", a_index, b_index, distance);
-        printf("\nBody %d: %7.64f  %7.64f  %7.64f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
-        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
+//        printf("\n -------------- Bodies %d and %d should collide with distance : %5.40f\n", a_index, b_index, distance);
+//        printf("\nBody %d: %7.64f  %7.64f  %7.64f", a_index, bodies[a_index].positionX, bodies[a_index].positionY, bodies[a_index].positionZ);
+//        printf("\nBody %d: %7.64f  %7.64f  %7.64f", b_index, bodies[b_index].positionX, bodies[b_index].positionY, bodies[b_index].positionZ);
 
         fuseBodies(a, b);
         timeStepSize = defaultTime;
@@ -342,7 +342,6 @@ void updateBodies() {
     t += timeStepSize;
 }
 
-
 // ----------------------------------------------------
 //                RANDOM BODY GENERATOR
 // ----------------------------------------------------
@@ -356,7 +355,7 @@ void createRandomBodies(int noOfBodies) {
 
     bodies = new Body[noOfBodies];
 
-    for (int i=0; i < noOfBodies; ++i) {
+    for (int i = 0; i < noOfBodies; ++i) {
         bodies[i].positionX = pos_dist(e2);
         bodies[i].positionY = pos_dist(e2);
         bodies[i].positionZ = pos_dist(e2);
@@ -369,11 +368,16 @@ void createRandomBodies(int noOfBodies) {
         bodies[i].isActive = true;
     }
 
-    std::cout << "created random setup with " << noOfBodies << " bodies" << std::endl;
+    // DEBUG
+//    std::cout << "created random setup with " << noOfBodies << " bodies" << std::endl;
 }
+
 
 // ----------------------------------------------------
 //                 COMMAND LINE PARSER
+// ----------------------------------------------------
+//  If the -r flag is used, create random bodies.
+//  Must be followed by the number of bodies.
 // ----------------------------------------------------
 
 bool checkFlag(char** begin, char** end, const std::string &option)
@@ -396,8 +400,8 @@ char* getCmdOption(char** begin, char** end, const std::string &option)
 // ----------------------------------------------------
 
 int main(int argc, char **argv) {
-    clock_t t;
-    t = clock();
+    clock_t tStart;
+    tStart = clock();
 
     // Check if create bodies
     if(checkFlag(argv, argv + argc, "-r")) {
@@ -406,7 +410,7 @@ int main(int argc, char **argv) {
 
         // Get number of bodies from command line
         char* cmdOption = getCmdOption(argv, argv + argc, "-r");
-        int numberOfBodies = atoi(cmdOption);
+        numberOfBodies = atoi(cmdOption);
         createRandomBodies(numberOfBodies);
     } else {
         // Insufficient args
@@ -438,7 +442,7 @@ int main(int argc, char **argv) {
     // printParaviewSnapshot(0);
 
     int currentTimeSteps = 0;
-    const int plotEveryKthStep = 1;
+    const int plotEveryKthStep = 100;
     while (t <= tFinal) {
         updateBodies();
         currentTimeSteps++;
@@ -447,15 +451,19 @@ int main(int argc, char **argv) {
             // DEBUG
             // std::cout << "Going into snapshot " << currentTimeSteps/plotEveryKthStep << std::endl;
 
+            // Print number of bodies
+            printf("%d, %d\n", currentTimeSteps, (numberOfBodies - NumInactive));
+
             // printParaviewSnapshot(currentTimeSteps/plotEveryKthStep);
         }
     }
 
     // closeParaviewVideoFile();
 
-    t = clock() - t;
-    double time_taken = ((double)t)/CLOCKS_PER_SEC;
+    tStart = clock() - tStart;
+    double time_taken = ((double)tStart)/CLOCKS_PER_SEC;
     printf("Time taken: %f \n", time_taken);
+//    std::cout << time_taken << std::endl;
 
     return 0;
 }
